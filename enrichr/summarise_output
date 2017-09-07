@@ -57,8 +57,11 @@ def main(cutoff, outdir, libs, printall):
             if printall:
                 print "\n".join(output)
             else:
-                print "\n".join(output[:10])
-                print "\t..."
+                if len(output) > 10:
+                    print "\n".join(output[:10])
+                    print "\t..."
+                else:
+                    print "\n".join(output)
             print ""   
 
 if __name__ == "__main__":

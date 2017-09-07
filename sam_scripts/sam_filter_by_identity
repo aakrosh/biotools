@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+        sam_filter_by_identity [options] reference.fa alignments.sam
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+        -i,--idthreshold : threshold on identity [0]
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+import pysam
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def main(refname, samname, idthreshold):
+    samfile = pysam.AlignmentFile(samname, "r")
+    reffile = pysam.FastaFile(refname)
+    outfile = pysam.AlignmentFile("-", "w", template=samfile)
+
+    numpassed = 0
+    numanalyzed = 0
+
+    for read in samfile:
+        numanalyzed += 1
+
+        matches = 0
+        mismatches = 0
+        for q,r in read.get_aligned_pairs():
+            if q != None and r != None:
+                qbase = read.query_sequence[q]
+                rbase = reffile.fetch(samfile.getrname(read.reference_id),r,r+1)
+                if qbase.upper() == rbase.upper():
+                    matches += 1
+                else:
+                    mismatches += 1
+
+        idnt = matches * 100.0 / (matches + mismatches)
+
+        if idnt > idthreshold:
+            numpassed += 1
+            outfile.write(read)
+            
+    print >> stderr, "%d of %d (%2.2f%%) alignments passed" % (numpassed, numanalyzed, numpassed * 100.0 / numanalyzed) 
+
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdi:",["help", "debug", "idthreshold="])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    idthreshold = 0
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-i", "--idthreshold"):
+            idthreshold = int(a)
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 2:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(args[0], args[1], idthreshold)

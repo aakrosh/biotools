@@ -1,0 +1,129 @@
+#!/usr/bin/env python
+
+"""
+    axt_merge reads.fa file1.axt file2.axt file3.axt ...
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+from random import shuffle
+
+from fasta import *
+
+class Alignment:
+    pass
+
+def Axtalignment(file):
+    """Return the next AXT block from the file.
+    """
+    line = file.readline()
+    
+    # ignore any whitespace at the beginning of the file
+    while len(line.strip()) == 0 or line.startswith("#"): 
+        line = file.readline()
+        if not line: raise StopIteration
+
+    while line:
+        num_read = 0
+
+        alignment = Alignment()
+        indx,rname,rpos,rend,qname,qpos,qend,strand,score = line.strip().split()
+        alignment.indx = int(indx)
+        alignment.rname = rname
+        alignment.rpos = int(rpos) - 1
+        alignment.rend = int(rend)
+        alignment.qname = qname
+        alignment.qpos = int(qpos) - 1
+        alignment.qend = int(qend)
+        alignment.strand = strand
+        alignment.score = int(score)
+        
+        line = file.readline()
+        alignment.rtext = line.strip().upper()
+    
+        line = file.readline()
+        alignment.qtext = line.strip().upper()
+        
+        yield alignment
+        
+        line = file.readline()
+        while len(line.strip()) == 0:
+            line = file.readline()
+            if not line: raise StopIteration
+       
+    raise StopIteration
+
+def Axtstring(aln):
+    string = ""
+    string += "%d %s %d %d %s %d %d %s %d\n" % (aln.indx,aln.rname,aln.rpos+1,aln.rend,aln.qname,aln.qpos+1,aln.qend,aln.strand,aln.score)
+    string += "%s\n" % aln.rtext
+    string += "%s\n" % aln.qtext
+    return string
+
+axtindex = 0
+
+def main(readsname, filenames):
+    # read the first sequence from the file
+    records = fasta(readsname)
+    records.next()
+
+    # keep iterators from all the AXT files
+    blocks = []
+    for filename in filenames:
+        file = open(filename, "r")
+        block = Axtalignment(file)
+        aln = block.next()
+        blocks.append((aln,block))
+ 
+    global axtindex   
+    while records:
+        r = records.fsequence
+        print >> stderr, "Looking at %s" % r.name
+
+        alignments = []
+
+        for indx,(aln,block) in enumerate(blocks):
+            if aln.qname == r.name:
+                while aln.qname == r.name:
+                    alignments.append(aln)
+                    try:
+                        aln = block.next()
+                        blocks[indx] = (aln,block)
+                    except StopIteration:
+                        break
+
+        if alignments:
+            print >> stderr, "Printing for %s" % r.name
+            for aln in alignments:
+                aln.indx = axtindex
+                axtindex += 1
+                print Axtstring(aln)
+
+        try:
+            records.next()
+        except StopIteration:
+            break
+    records.close()
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) <= 1:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(args[0], args[1:])

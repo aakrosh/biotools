@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+        bam_outer_distance [options] file.bam
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug : print debug information
+        -p,--plot : plot the insert length distribution as a png [False]
+        -s,--sample : sample these many proper pairs [100000]
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+from itertools import izip
+from random import random, randint
+
+import pysam as ps
+import numpy as np
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@virginia.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def main(filename, plot, samples):
+    samfile = ps.AlignmentFile(filename, "rb")
+
+    num_processed = 0
+    outerdistance = np.zeros(samples, dtype = np.int)
+
+    for aln in samfile:
+        if aln.is_duplicate or aln.is_qcfail or aln.is_secondary or \
+           aln.is_supplementary or aln.is_unmapped: 
+            continue
+
+        if aln.is_paired and aln.is_proper_pair:
+            if aln.template_length > 0:
+                outerdistance[num_processed] = aln.template_length
+                num_processed += 1
+                if num_processed == samples: break
+
+    outerdistance = outerdistance[:num_processed]
+    
+    print np.mean(outerdistance),np.std(outerdistance)
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdps:",["help","debug","plot","sample="])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    plot = False
+    samples = 100000
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-p", "--plot"):
+            plot = True
+        elif o in ("-s", "--sample"):
+            samples= int(a)
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 1:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(args[0], plot, samples)

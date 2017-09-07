@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+set -x
+
+lastz=lastz
+lzscores=""
+lzparams="--ambiguous=iupac"
+lzfmt=""
+name2col="4"
+threads=1
+
+unmask="0"
+
+while getopts ":t:un:" opt; do
+    case ${opt} in 
+        t)
+          threads="$OPTARG"
+          ;;
+        u)
+          unmask="1"
+          ;;
+        n)
+          name2col="$OPTARG"
+          ;;
+        \?)
+          echo "Invalid option: -$OPTARG" >&2
+          ;;
+    esac
+done  
+
+shift $((OPTIND-1))
+
+
+if [ $# -ne 2 ]; then 
+    echo "./align_reads_with_lz [options] reference.fa reads.fq"
+    echo "options are -t to specify number of threads"
+    echo "            -u to unmask the reference"
+    exit 1
+fi
+
+reference="$1"
+reads="$2"
+
+if [ ${unmask} = "1" ]; then
+    seq 1 ${threads} \
+    | xargs -P ${threads} -I xxx \
+      ${lastz} \
+      ${reference}[unmask,multi] \
+      ${reads}[nameparse=full,subsample=xxx/${threads}] \
+      ${lzscores} ${lzparams} ${lzfmt} \
+      --output=alignments.xxx.lz
+else
+    seq 1 ${threads} \
+    | xargs -P ${threads} -I xxx \
+      ${lastz} \
+      ${reference}[multi] \
+      ${reads}[nameparse=full,subsample=xxx/${threads}] \
+      ${lzscores} ${lzparams} ${lzfmt} \
+      --output=alignments.xxx.lz
+fi
+
+combine_alignments ${name2col} ${threads} ${reads} > alignments.lz
+rm alignments.*.lz

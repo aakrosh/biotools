@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+
+from sys    import argv, stderr, exit
+from getopt import getopt, GetoptError
+from math   import pow, exp
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+debug_flag = False
+
+def factorial(n):
+    if n == 1 or n == 0:
+        return 1
+
+    return n * factorial(n-1)
+
+def main(val):
+    coverage = float(val)
+    total = 0.0
+    hits  = 0
+    print "coverage\tprobability\tcumulative probability"
+    while total < 0.99999:
+        probability = pow(coverage, hits) * exp(-coverage) / factorial(hits)
+        total      += probability
+        print "%d\t%0.5f\t%0.5f" % (hits, probability, total)
+        hits = hits + 1
+
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "lander_waterman [options] average_coverage"
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 1:
+        usage()
+        exit(3)
+
+    main(args[0])
+

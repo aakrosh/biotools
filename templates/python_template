@@ -1,0 +1,44 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+        [options] 
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@virginia.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def main(filename):
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != :
+        print >> stderr, __doc__
+        exit(3)
+
+    main()

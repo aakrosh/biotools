@@ -1,0 +1,186 @@
+#!/usr/bin/env python
+
+"""
+Input : Alignments in SAM format
+Output: Alignments in AXT format
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+import re
+
+from fasta import *
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+match = 1
+mismatch = 4
+gap_open = 6
+gap_extend = 1
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def ReadSequences(filename):
+    records = fasta(filename)
+    sequences = {}    
+
+    for r in records:
+        s = r.fastasequence
+        sequences[s.name.split()[0]] = s.seq
+    
+    records.close()
+    return sequences
+
+def InferAlignments(reference_sequence, reference_pos, query_sequence, cigar):
+    alignments = re.split('([0-9]+[M,I,D,N,S,H,P])', cigar)
+    
+    rtext = ""
+    rpos  = reference_pos
+    qtext = ""
+    qpos  = 0
+    qstart = -1
+
+    for aln in alignments:
+        if not aln: continue
+
+        length = int(aln[:-1])
+
+        if aln[-1] == "M":
+            rtext += reference_sequence[rpos:rpos+length]
+            qtext += query_sequence[qpos:qpos+length]
+            rpos  += length
+            qpos  += length             
+        elif aln[-1] == "I":
+            rtext += "-" * length
+            qtext += query_sequence[qpos:qpos+length]
+            qpos  += length
+        elif aln[-1] == "D":
+            rtext += reference_sequence[rpos:rpos+length]
+            qtext += "-" * length
+            rpos  += length
+        elif aln[-1] == "N":
+            print >> stderr, "Unhandled CIGAR operation : N"
+        elif aln[-1] == "S":
+            if qpos == 0: qstart = length + 1
+            qpos += length
+        elif aln[-1] == "H":
+            if qpos == 0: qstart = length + 1
+        elif aln[-1] == "P":
+            pass
+        elif aln[-1] == "=":
+            rtext += reference_sequence[rpos:rpos+length]
+            qtext += query_sequence[qpos:qpos+length]
+            rpos  += length
+            qpos  += length  
+        elif aln[-1] == "X":
+            rtext += reference_sequence[rpos:rpos+length]
+            qtext += query_sequence[qpos:qpos+length]
+            rpos  += length
+            qpos  += length  
+        else:
+            print >> stderr, "Incorrect CIGAR"
+            exit(4)  
+
+    if qstart == -1: qstart = 1
+
+    return qstart,rtext,qtext
+
+def main(reference_name, alignment_name, min_mapq, min_length):
+    # read the reference sequence for easy access later
+    reference_sequences = ReadSequences(reference_name)
+    print >> stderr, "Read all the reference sequences"
+
+    # now go through the alignments printing them in the AXT format
+    file = open(alignment_name, "r")
+
+    alignment_index = 0
+    for line in file:
+        if line.startswith("@"): continue
+
+        tokens = line.strip().split("\t")
+        qname  = tokens[0]
+        flag   = int(tokens[1])
+        rname  = tokens[2]
+        pos    = int(tokens[3])
+        mapq   = int(tokens[4])
+        cigar  = tokens[5]
+        rnext  = tokens[6]
+        pnext  = int(tokens[7])
+        tlen   = int(tokens[8])
+        seq    = tokens[9]
+        qual   = tokens[10]
+
+        # dont care if this is not a valid alignment
+        if (flag & 0x4) == 4: continue
+
+        # dont care if it is lower mapq than specified
+        if (mapq < min_mapq): continue
+
+        strand = "+"
+        if (flag & 0x10) == 16: strand = "-" 
+
+        qpos,reference,query = InferAlignments(reference_sequences[rname], pos - 1, seq, cigar) 
+        if len(reference) < min_length: continue
+
+        end_pos = pos - 1
+        end_qpos = qpos - 1
+        for r,q in zip(reference,query):
+            if r != "-": end_pos += 1
+            if q != "-": end_qpos += 1        
+
+        score = 0
+        for optional in tokens[11:]:
+            tag,type,value = optional.split(":")
+            if tag == "AS":
+                score = int(value)
+
+        if alignment_index != 0:
+            print ""
+        print alignment_index, rname, pos, end_pos, qname, qpos, end_qpos, strand, score
+        print reference
+        print query
+
+        alignment_index += 1
+
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "sam_to_axt  [options] reference.fa alignments.sam"
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+    print >> f, "-q,--quality: only convert alignment with this minimum mapq[0]"
+    print >> f, "-l,--length: only convert alignment of this length or more[1]"
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdq:l:",["help", "debug", "quality=", "length="])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    min_mapq = 0
+    min_length = 1
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-q", "--quality"):
+            min_mapq = int(a)
+        elif o in ("-l", "--length"):
+            min_length = int(a)
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 2:
+        usage()
+        exit(3)
+
+    main(args[0], args[1], min_mapq, min_length)

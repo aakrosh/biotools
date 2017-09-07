@@ -1,0 +1,42 @@
+#!/usr/bin/Rscript
+
+## Default when nothing is passed
+args = commandArgs(trailingOnly = TRUE)
+if(length(args) != 2){
+    args <- c("--help")    
+}
+
+## Help section
+if("--help" %in% args) {
+  cat("
+      Run a simulation with random breakpoints
+ 
+      Arguments:
+      --seed=someValue   - numeric, seed for the simulation
+      --numv=someValue   - numeric, number of variants of each type
+      --help              - print this text
+ 
+      Example:
+      ./simulate_random_breakpoints.R --seed=10 --numv=2500 \n\n")
+ 
+  q(save="no")
+}
+
+## Parse arguments (we expect the form --arg=value)
+parseArgs <- function(x) strsplit(sub("^--", "", x), "=")
+argsDF <- as.data.frame(do.call("rbind", parseArgs(args)))
+argsL <- as.list(as.character(argsDF$V2))
+names(argsL) <- argsDF$V1
+ 
+## Arg1 default
+if(is.null(argsL$seed)) {
+    argsL$seed = 100
+}
+ 
+## Arg2 default
+if(is.null(argsL$numv)) {
+    argsL$numv = 2500
+}
+
+seed = as.integer(argsL$seed)
+num  = as.integer(argsL$numv)

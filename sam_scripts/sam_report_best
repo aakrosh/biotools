@@ -1,0 +1,151 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+        sam_report_best [options] reference.fa alignments.sam
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+        -b,--band : report all alignments within this % matches of the best[0]
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+import pysam
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+class Alignment:
+    '''Minimal representation of a single SAM alignment.
+    '''
+    def __init__(self, alignment):
+        self.query_name = alignment.query_name
+        assert alignment.query_sequence != None
+        self.query_sequence = alignment.query_sequence
+        self.query_qualities = alignment.query_qualities
+
+        self.flag = alignment.flag
+        self.reference_id = alignment.reference_id
+        self.reference_start = alignment.reference_start
+        self.mapping_quality = alignment.mapping_quality
+        self.cigar = alignment.cigar
+        self.next_reference_id = alignment.next_reference_id
+        self.next_reference_start= alignment.next_reference_start
+        self.template_length= alignment.template_length
+        self.tags = alignment.tags
+        self.query_length = alignment.infer_query_length()
+
+        self.aligned_pairs = []
+        for q,r in alignment.get_aligned_pairs():
+            self.aligned_pairs.append((q,r))  
+        self.is_unmapped = alignment.is_unmapped
+
+def PrintSamOutput(aln, outfile):
+    '''Print the alignments as SAM records.
+    '''
+    a = pysam.AlignedSegment()
+    a.query_name = aln.query_name
+    a.query_sequence = aln.query_sequence
+    a.flag = aln.flag
+    a.reference_id = aln.reference_id
+    a.reference_start = aln.reference_start
+    a.mapping_quality = aln.mapping_quality
+    a.cigar = aln.cigar
+    a.next_reference_id = aln.next_reference_id
+    a.next_reference_start = aln.next_reference_start
+    a.template_length = aln.template_length
+    a.query_qualities = aln.query_qualities
+    a.tags = aln.tags
+    outfile.write(a)
+
+def ProcessAlignments(alignments, threshold, samfile, reffile, outfile):
+    #print >> stderr, "Processing %s" % (alignments[0].query_name)
+    # do not need to do anything if this was unaligned
+    if len(alignments) == 1 and alignments[0].is_unmapped:
+        return
+
+    matchcounts = []
+
+    for alignment in alignments:
+        matches = 0
+        for q,r in alignment.aligned_pairs:
+            if q != None and r != None:
+                qbase = alignment.query_sequence[q]
+                rbase = reffile.fetch(samfile.getrname(alignment.reference_id),r,r+1)
+                if qbase.upper() == rbase.upper():
+                    matches += 1
+        
+        matchcounts.append(matches)
+    #print >> stderr, matchcounts
+
+    # find the best alignment
+    bestcount = 0
+    for matchcount in matchcounts:
+        if matchcount > bestcount:
+            bestcount = matchcount
+    #print >> stderr, bestcount
+
+    # now print all alignment that are within the threshold 
+    for matchcount,alignment in zip(matchcounts, alignments):
+        diff = (bestcount - matchcount) * 100.0 / matchcount 
+        if diff <= threshold:
+            #print >> stderr, "Printing one"
+            PrintSamOutput(alignment, outfile)
+
+def main(refname, samname, threshold):
+    samfile = pysam.AlignmentFile(samname, "rb")
+    reffile = pysam.FastaFile(refname)
+    outfile = pysam.AlignmentFile("-", "w", template=samfile)
+    
+    lastname = None
+    alignments = []
+
+    for read in samfile:
+        alignment = Alignment(read)
+
+        if lastname == None or read.query_name == lastname:
+            if lastname == None:
+                lastname = read.query_name
+                alignments.append(alignment)
+            else:
+                alignments.append(alignment)
+        else:
+            ProcessAlignments(alignments, threshold, samfile, reffile, outfile)
+            lastname = read.query_name
+            alignments = [alignment]
+
+    if lastname != None:
+        ProcessAlignments(alignments, threshold, samfile, reffile, outfile)
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hdb:",["help", "debug", "band="])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    threshold = 0.0
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-b", "--band"):
+            threshold = int(a)
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 2:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(args[0], args[1], threshold)

@@ -1,0 +1,54 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+        sam_to_fastq  [options] < input.sam
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+import pysam
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def main():
+    infile = pysam.AlignmentFile("-", "r")
+    outfile = pysam.AlignmentFile("-", "w", template=infile)
+
+    for aln in infile:
+        print "@%s/%s" % (aln.query_name, "2" if aln.is_read2 else "1")
+        print "%s" % aln.query_sequence
+        print "+"
+        print "%s" % "".join([chr(x+33) for x in aln.query_qualities])
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 0:
+        print >> stderr, __doc__
+        exit(3)
+
+    main()

@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+      gotoh [options] seq1 seq2 
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+
+    This implements the classic algorithm by Gotoh in 1972 to find the optimal
+    score when aligning two sequences.
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+from array import array
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+match = 1
+mismatch = -2
+gapopen = -4
+gapextend = -3
+
+# proxy for -negative infinity. I am going to use arrays of long ints that are 4
+# bytes. This is the minimum number they can represent
+INT_MIN = -2147483647
+
+def PrintRow(R, f = stderr):
+    output = []
+    for r in R:
+        if r == INT_MIN:
+            output.append("-inf")
+        else:
+            output.append(str(r))
+    print >> f, "\t".join(output) 
+
+def PrintMatrix(M, string, f = stderr):
+    print >> f, string
+    print >> f, "-"*30
+    for m in M:
+        PrintRow(m, f) 
+    print >> f, "-"*30
+    print >> f, ""
+
+def main(target, query):
+    global match, mismatch, gapopen, gapextend
+    t = len(target)
+    n = len(query)
+
+    # initialization
+    maxscore = INT_MIN
+    V = [array('l', [0] * (n + 1)) for i in range(0,t+1)]
+    Y = [array('l', [0] * (n + 1)) for i in range(0,t+1)]
+    Z = [array('l', [0] * (n + 1)) for i in range(0,t+1)]
+    V[0][0] = 0
+    for i in range(0,t+1):
+            V[i][0] = 0
+            Y[i][0] = INT_MIN
+            Z[i][0] = INT_MIN
+    for j in range(0,n+1):
+            V[0][j] = 0
+            Y[0][j] = INT_MIN
+            Z[0][j] = INT_MIN
+
+    # the actual alignment
+    for i in range(1, t+1):
+        for j in range(1, n+1):
+            X = V[i-1][j-1] 
+            if target[i-1] == query[j-1]:
+                X += match
+            else:
+                X += mismatch
+            Y[i][j] = max(V[i-1][j] + gapopen, Y[i-1][j]) + gapextend
+            Z[i][j] = max(V[i][j-1] + gapopen, Z[i-1][j]) + gapextend
+            V[i][j] = max(X, Y[i][j], Z[i][j], 0)
+            if V[i][j] > maxscore:
+                maxscore = V[i][j]
+            #print i,j,target[i-1],query[j-1],X,Y[i][j],Z[i][j]
+        #PrintMatrix(V, "Score")   
+
+    print maxscore
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 2:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(args[0], args[1])

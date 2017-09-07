@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+
+# set variables based on where I am running this script
+if [[ $HOSTNAME =~ .*Virginia.EDU ]]; then
+    echo "Running on the local machine"
+
+    BWA=/Users/ratan/third-party/bwa-0.7.10/bwa
+    REFERENCE=/Users/ratan/shared/genomes/b37+decoy/hs37d5.fa
+    SAMTOOLS=/Users/ratan/third-party/samtools-1.1/samtools
+    SAMBAMBA=/Users/ratan/third-party/sambamba_v0.5.4
+    SAMBLASTER=/Users/ratan/third-party/samblaster/samblaster
+
+elif [[ $HOSTNAME =~ .*local ]]; then
+    echo "Running on the local machine"
+
+    BWA=/Users/ratan/third-party/bwa-0.7.10/bwa
+    REFERENCE=/Users/ratan/shared/genomes/b37+decoy/hs37d5.fa
+    SAMTOOLS=/Users/ratan/third-party/samtools-1.1/samtools
+    SAMBAMBA=/Users/ratan/third-party/sambamba_v0.5.4
+    SAMBLASTER=/Users/ratan/third-party/samblaster/samblaster
+
+elif [[ $HOSTNAME =~ .*virginia.edu ]]; then
+    echo "Running on a UVA system"
+
+    BWA=/m/cphg-RLscratch/cphg-RLscratch/share/bwa-0.7.10/bwa
+    REFERENCE=/m/cphg-RLscratch/cphg-RLscratch/share/gatk_bundle/ftp.broadinstitute.org/bundle/2.8/b37/human_g1k_v37_decoy.fasta
+    SAMTOOLS=/m/cphg-RLscratch/cphg-RLscratch/share/samtools-bcftools-htslib-1.0_x64-linux/bin/samtools
+    SAMBAMBA=/m/cphg-RLscratch/cphg-RLscratch/share/sambamba_v0.5.4
+    SAMBLASTER=/m/cphg-RLscratch/cphg-RLscratch/share/samblaster/samblaster
+
+elif [[ $HOSTNAME =~ merlion-* ]]; then
+    echo "Running on a SCELSE system"
+
+    BWA=/home/ratan/software/bwa-0.7.10/bwa
+    REFERENCE=/data/ratan/humans/resource/human_g1k_v37_decoy.fasta
+    SAMTOOLS=/home/ratan/software/samtools-1.1/samtools
+    SAMBAMBA=/home/ratan/software/sambamba
+    SAMBLASTER=/home/ratan/software/samblaster-v.0.1.20/samblaster
+
+elif [[ $HOSTNAME =~ smurf-* ]]; then
+    echo "Running on a SCELSE system"
+
+    BWA=/home/ratan/software/bwa-0.7.10/bwa
+    REFERENCE=/data/ratan/humans/resource/human_g1k_v37_decoy.fasta
+    SAMTOOLS=/home/ratan/software/samtools-1.1/samtools
+    SAMBAMBA=/home/ratan/software/sambamba
+    SAMBLASTER=/home/ratan/software/samblaster-v.0.1.20/samblaster
+
+else
+    echo "Unknown system."
+    exit 1
+
+fi
+
+threads="1"
+lane="1"
+sample="sample"
+
+while getopts ":t:l:s:" opt; do
+    case ${opt} in
+        t)
+          threads="$OPTARG"
+          ;;
+        l)
+          lane="$OPTARG"
+          ;;
+        s)
+          sample="$OPTARG"
+          ;;
+        :)
+          echo "Option -$OPTARG requires an argument."
+          exit 1
+          ;;
+        \?)
+          echo "Invalid option: -$OPTARG" >&2
+          ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+if [ $# -ne 2 -a $# -ne 1 ]; then 
+    echo "./align_sample_sequences [options] read1.fq read2.fq"
+    echo "options are -t to specify number of threads"
+    echo "            -s to specify unique name for the sample"
+    echo "            -l to specify the lane on the sequencer"
+    exit 1
+fi
+
+echo "Sample  : $sample"
+echo "Threads : $threads"
+echo "Lane    : $lane"
+echo "Read1   : $1"
+echo "Read2   : $2" 
+
+ffile="$1"
+mfile="$2"
+
+# align the sequences, mark duplicates, find the discordant sequences, and
+# convert the alignments to BAM
+time ${BWA} mem \
+  -t ${threads} -M -Y \
+  -R "@RG\tID:${sample}\tSM:${sample}\tLB:lb${sample}\tPL:ILLUMINA\tPU:${lane}" \
+  ${REFERENCE} ${ffile} ${mfile} \
+| ${SAMBLASTER} --addMateTags -d discordant.${sample}.sam \
+  -s splitters.${sample}.sam -u unmapped.${sample}.fq -e \
+| ${SAMTOOLS} view -bST ${REFERENCE} - \
+> alignments.namesorted.${sample}.bam
+
+# convert the discordant and splitter sequences to BAM to save space
+time ${SAMBAMBA} view -S -f bam -o discordant.${sample}.bam -t ${threads} discordant.${sample}.sam
+rm discordant.${sample}.sam
+time ${SAMBAMBA} view -S -f bam -o splitters.${sample}.bam -t ${threads} splitters.${sample}.sam
+rm splitters.${sample}.sam
+
+# gzip the unmapped sequences
+gzip unmapped.${sample}.fq 
+
+# sort the sequences by coordinate
+time ${SAMBAMBA} sort -m 4G -t ${threads} -o alignments.${sample}.bam alignments.namesorted.${sample}.bam
+rm alignments.namesorted.${sample}.bam
+
+# index the final alignment file
+time ${SAMBAMBA} index -t ${threads} alignments.${sample}.bam

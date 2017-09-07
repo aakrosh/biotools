@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+        shuf  [options] < lines.txt
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+from tempfile import mkstemp
+from os import stat, write, close, remove
+from random import shuffle, randint
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def main():
+    pathnames = []
+
+    numbytes = 0
+    lines = []
+    fd,pathname = mkstemp(".txt", "shuftmp", ".")
+
+    for line in stdin:
+        lines.append(line)
+        numbytes += len(line)
+
+        if numbytes > (60 * 1024 * 1024):
+            shuffle(lines)
+            for x in lines:
+                write(fd, x)
+            close(fd) 
+            pathnames.append(pathname)       
+
+            numbytes = 0
+            lines = []
+            fd,pathname = mkstemp(".txt", "shuftmp", ".")
+            
+    shuffle(lines)
+    for x in lines:
+        write(fd, x)   
+    close(fd)
+    pathnames.append(pathname)
+     
+    if len(pathnames) > 1024:
+        print >> stderr, "Too many files to open"
+
+    # open all the files
+    files = []
+    for pn in pathnames:
+        file = open(pn, "r")
+        files.append(file)
+
+    while True:
+        indx = randint(0, len(files)-1)
+
+        line = files[indx].readline()
+        if line:
+            print line,
+        else:
+            fh = files.pop(indx)
+            fh.close()      
+
+        if len(files) == 0: break
+   
+    # clean up
+    for pn in pathnames:
+        remove(pn)
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 0:
+        print >> stderr, __doc__
+        exit(3)
+
+    main()

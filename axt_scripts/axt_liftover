@@ -1,0 +1,153 @@
+#!/usr/bin/env python
+
+"""
+    axt_liftover file.axt reference.fa size extra
+    
+    where size is the size of each split
+          extra represents the overlap between consecutive splits
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+from fasta import *
+
+class Alignment:
+    pass
+
+def Axtalignment(file):
+    """Return the next AXT block from the file.
+    """
+    line = file.readline()
+    
+    # ignore any whitespace at the beginning of the file
+    while len(line.strip()) == 0 or line.startswith("#"): 
+        line = file.readline()
+        if not line: raise StopIteration
+
+    while line:
+        num_read = 0
+
+        alignment = Alignment()
+        indx,rname,rpos,rend,qname,qpos,qend,strand,score = line.strip().split()
+        alignment.indx = int(indx)
+        alignment.rname = rname
+        alignment.rpos = int(rpos) - 1
+        alignment.rend = int(rend)
+        alignment.qname = qname
+        alignment.qpos = int(qpos) - 1
+        alignment.qend = int(qend)
+        alignment.strand = strand
+        alignment.score = int(score)
+        
+        line = file.readline()
+        alignment.rtext = line.strip().upper()
+    
+        line = file.readline()
+        alignment.qtext = line.strip().upper()
+        
+        yield alignment
+        
+        line = file.readline()
+        while len(line.strip()) == 0:
+            line = file.readline()
+            if not line: raise StopIteration
+       
+    raise StopIteration
+
+def Axtstring(aln):
+    string = ""
+    string += "%d %s %d %d %s %d %d %s %d\n" % (aln.indx,aln.rname,aln.rpos+1,aln.rend,aln.qname,aln.qpos+1,aln.qend,aln.strand,aln.score)
+    string += "%s\n" % aln.rtext
+    string += "%s\n" % aln.qtext
+    return string
+
+axtindex = 0
+
+def ProcessAlignments(alignments, mapping):
+    for aln in alignments:
+        chrom,start,size = mapping[aln.rname]
+        if aln.rpos > size: continue
+
+        aln.rname = chrom
+        aln.rpos += start
+        aln.rend += start
+    
+        print Axtstring(aln)
+
+def main(axtname, refanme, size, overlap):
+    # read all the sequences from the reference
+    records = fasta(refname)  
+    sequences = {}
+    order = []  
+
+    for r in records:
+        s = r.fsequence
+        sequences[s.name] = s.seq
+        order.append(s.name)
+    records.close()
+
+    # now use the size and overlap to find mappings between the two coordinate
+    # systems
+    mapping = {}
+    partition_indx = 0
+    for chrom in order:
+        for i in range(0, len(sequences[chrom]), size):
+            mapping["%3d" % partition_indx] = (chrom,i,size)
+            partition_indx += 1
+
+    # now read the AXT file and print the lifted alignments
+    file = open(axtname, "r")
+
+    lastname2  = None
+    alignments = []
+    indx = 0
+
+    for alignment in Axtalignment(file):
+        assert alignment.indx == indx
+        assert alignment.rpos >= 0
+        assert alignment.rend >= alignment.rpos
+        assert alignment.qpos >= 0
+        assert alignment.qend >= alignment.qpos
+        assert alignment.strand in ["+","-"]
+        assert alignment.score > 0
+
+        if alignment.qname == lastname2:
+            alignments.append(alignment)
+        else:
+            if lastname2 == None:
+                alignments.append(alignment)
+            else:
+                ProcessAlignments(alignments, mapping)
+                alignments = [alignment]
+
+        lastname2 = alignment.qname
+        indx += 1
+        
+    if lastname2 != None:
+        ProcessAlignments(alignments, mapping)
+
+    file.close()
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 4:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(args[0], args[1], int(args[2]), int(args[3]))

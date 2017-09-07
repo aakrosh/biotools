@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+
+from collections import Counter
+from sys import stdin
+
+cnt = Counter()
+for line in stdin:
+    cnt.update(line.strip().upper())
+
+for k,v in cnt.items():
+    print k,v
+    
+GC = cnt["G"] + cnt["C"]
+total = cnt["G"] + cnt["C"] + cnt["A"] + cnt["T"]
+print "Average GC content : %2.2f" % (GC * 100.0 / total)

@@ -1,0 +1,33 @@
+// 
+
+#include "command_line_parsing.h"
+
+char* program_version_major = VERSION_MAJOR;
+char* program_version_minor = VERSION_MINOR;
+char* program_revision_date = REVISION_DATE;
+char* program_name          = 
+char* program_description   = 
+char* program_use           = 
+
+int main(int argc, char** argv) {
+    // parse the command line
+    CommandLineArguments* cl_options = NewCommandLineArguments();
+
+    ParseOptions(&cl_options, &argc, &argv);
+    
+    // does the user just want some help
+    Bool print_help = GetOptionBoolValueOrDie(cl_options, "help");
+    if (print_help == TRUE) {
+        PrintSimpleUsageString(cl_options);
+        return EXIT_SUCCESS;
+    }
+
+    // does the user know what he/she is doing?
+    if (argc != ){
+        PrintSimpleUsageString(cl_options);
+        return EXIT_FAILURE;
+    }
+
+    FreeParseOptions(&cl_options, &argv);      
+    return EXIT_SUCCESS;
+}

@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+
+"""
+This program makes it easier for me to calculate the kind of stuff that is 
+described in the DIAL manuscript
+a) Given lambda-fold genome coverage in random fragments of an individual
+genome, what fraction of the genome positions will be contained in two or
+more fragments from each parent? Or similarly when looking for homozygous
+differences between two individuals that are each sequenced to depth lambda/2? 
+
+"""
+
+from sys import argv, stderr, exit
+from getopt import getopt, GetoptError
+from math import exp
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def main(numindividuals, coverage):
+    assert numindividuals == 1 or numindividuals == 2
+    
+    a = exp(-coverage/2)    
+    b = 1 + (coverage/2)
+    z = 1 - (a*b)
+    zsquare = z*z
+
+    print "%d individuals, %2.2f coverage : %3.4f of the genome is covered" % \
+    (numindividuals, coverage, zsquare)
+
+def usage():
+    f = stderr
+    print >> f, "usage:"
+    print >> f, "dial_theory [options] "
+    print >> f, "where the options are:"
+    print >> f, "-h,--help : print usage and quit"
+    print >> f, "-d,--debug: print debug information"
+    print >> f, "-c,--coverage: coverage from \"each\" individual"
+    print >> f, "-n,--numindividuals: number of individuals"
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], \
+                    "hdn:c:",["help", "debug","numindividuals=","coverage="])
+    except GetoptError, err:
+        print str(err)
+        usage()
+        exit(2) 
+
+    numindividuals = 1
+    coverage       = 1.00
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        elif o in ("-n", "--numindividuals"):
+            numindividuals = int(a)
+        elif o in ("-c", "--coverage"):
+            coverage = float(a)
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 0:
+        usage()
+        exit(3)
+
+    main(numindividuals, coverage)

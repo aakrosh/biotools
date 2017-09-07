@@ -1,0 +1,65 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+      chromsort  [options] chroms.txt chromclmn zstartclmn endclmn < file.txt
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+
+    Use TimSort, which is the current algorithm of choice in python to sort the
+    input data in chromosomal order provided in the file chroms.txt. 
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def main(chromsname, chromsclmn, zstartclmn, endclmn):
+    data = {}
+
+    for line in stdin:
+        tokens = line.strip().split()
+
+        chrom  = tokens[chromsclmn]
+        zstart = tokens[zstartclmn]
+        end = tokens[endclmn]
+
+        if chrom not in data: data[chrom] = []
+        data[chrom].append((tokens))
+
+    file = open(chromsname, "r")
+    for line in file:
+        for tokens in sorted(data[line.strip()], key = lambda value: (int(value[zstartclmn]), int(value[endclmn]))):
+            print "\t".join(tokens)
+        
+    file.close()
+    
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 4:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(args[0], int(args[1])-1, int(args[2])-1, int(args[3])-1)

@@ -1,0 +1,64 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+      observation_probability [options] p 
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+
+    p will describe the probability of success in the experiment. For example if
+    experiment is to observe a microdeletion that is observed in 1 out of 400 
+    tries from a region then p = 1/400. Our goal here is to figure out the
+    probability that we observe the microdeletion in at least two reads when we
+    sequence the segment n times. How does this distribution vary with n.
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+from scipy import misc
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def CalculateExactProbability(k,n,p):
+    # The probability of seeing the event k times in n tries = C(n,k)p^(k)q^(n-k)
+    return misc.comb(n,k)*pow(p,k)*pow(1-p,n-k)
+
+def CalculateProbability(n,p):
+    probability = 0.0
+    for i in xrange(2,n+1):
+        probability += CalculateExactProbability(i,n,p)
+    return probability
+
+def main(p):
+    for n in xrange(2,4000):
+        print n, CalculateProbability(n,p)
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 1:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(float(argv[1]))

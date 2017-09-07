@@ -1,0 +1,288 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+        fastatools command [options] sequence.fa
+
+    where the commands are:
+        extract : extract contigs/chromosomes from sequence.fa
+        format  : format the sequence
+        printlengths : print the lengths of the sequences
+        generate : generate a fasta sequence
+        diffs   : print diffs from these fasta alignments.
+        filteronlength : filter sequences based on length
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+        
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+from collections import Counter
+
+import os
+import re
+import random
+
+from fasta import *
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@bx.psu.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+def fastaformat(filename, linesize):
+    """
+       Format the fasta file with 60 bases on each line by default.
+       
+       usage:
+           fastatools format [options] file.fa 
+
+       where the options are:
+           -l,--linesize : number of sequence bases in each line [60]
+    """
+    records = fasta(filename)
+    for r in records:
+        s = r.fastasequence
+        print ">%s" % s.name
+        print fastasequence.prettyprint_dna(s.seq, linesize)
+    records.close()
+
+def fastafilter(minlength, fastafile):
+    """
+      Output the sequences that have the minimum specified length.
+    
+      usage:    
+        fastatools filteronlength length file.fa
+    """
+    records = fasta(fastafile)
+
+    for r in records:
+        s = r.fastasequence
+        if len(s.seq) >= minlength:
+            print ">%s" % s.name
+            print fastasequence.prettyprint_dna(s.seq, 60)
+    records.close()
+
+def fastadiffs(fastafile):
+    """
+      Print the differences between sequences in this fasta alignments.
+
+      usage:
+        fastatools diffs file.fa
+    """
+    sequences = []
+
+    # read in the sequences
+    records = fasta(fastafile)
+    for r in records:
+        s = r.fastasequence
+        sequences.append(s.seq.upper())
+    records.close()
+
+    # now go through the saved sequences and print the allele frequency of the
+    # locations where we see more than one allele
+    slen = len(sequences[0])
+    numsequences = len(sequences)
+    counts = Counter()
+    for i in xrange(0, slen):
+        counts.clear()
+        counts.update([x[i] for x in sequences])
+        if len(counts) > 1:
+            keys = list(counts)
+            allelefreqs=[str(round(counts[x]*1.0/numsequences,4)) for x in keys]
+            print i,"/".join(keys)," ".join(allelefreqs)
+
+def fastalengths(fastafile, ignoreNs):
+    """
+       Print the lengths of the sequence.
+    
+       usage:
+           fastatools printlengths [options] file.fa
+
+        where the options are
+            -i,--ignoreN  
+    """
+    totallength = 0
+    records = fasta(fastafile)
+    for r in records:
+        s = r.fastasequence
+        count = Counter(s.seq)
+
+        if ignoreNs:
+            slen = sum(count.values())-count.get("N",0)-count.get("n",0)
+        else:
+            slen = sum(count.values())
+
+        print s.name,slen
+        totallength += slen
+    records.close()
+    print "Total length of the sequence: %d" % totallength
+
+def fastagenerate(size):
+    """
+    Generate a random fasta sequence.
+
+    usage:
+        fastatools generate [options] size
+    """
+    sequence = ""
+    for i in range(0,int(size)):
+        sequence += random.choice(["A","C","G","T"])
+
+    s = fastasequence("sequence", sequence)
+    print s
+
+
+def fastaextract(inputfile, fastafile):
+    """
+       Extract subsequences from the fasta file.
+
+       usage:
+           fastatools extract [options] input.txt file.fa
+
+       The input.txt file has the details of the subsequences to be extracted 
+       and should be tab delimited with the following columns:   
+       a) chromosome name
+       b) strand information ("+" or "-")
+       c) 0 based start coordinate
+       d) half-open end coordinate
+
+       Optionally a string chrom:strand:zstart-end can be supplied. 
+    """
+    subsequences = {}
+
+    if os.path.isfile(inputfile):
+        file = open(inputfile, "r")            
+        for line in file:
+            if line.startswith("#"): continue
+            tokens = line.strip().split("\t")
+            if len(tokens) == 1:
+                chrom = tokens[0]
+                strand = "+"
+                zstart = "-1"
+                end = "-1"
+            else:
+                assert len(tokens) == 4
+                chrom,strand,zstart,end = tokens
+            
+            assert strand in ["+", "-"], "%s" % line
+            zstart = int(zstart)
+            end = int(end)
+            if chrom not in subsequences: subsequences[chrom] = []
+            subsequences[chrom].append((strand,zstart,end))
+    else:
+        if inputfile.find(":") == -1:
+            chrom = inputfile
+            strand = "+"
+            zstart = "-1"
+            end = "-1"   
+        else:
+            pattern = re.compile("(\S+):([+,-]):(\d+)-(\d+)")
+            interval = pattern.match(inputfile)
+            chrom,strand,zstart,end = interval.groups()
+
+        assert strand in ["+", "-"]
+        zstart = int(zstart)
+        end = int(end)
+        if chrom not in subsequences: subsequences[chrom] = []
+        subsequences[chrom].append((strand,zstart,end))
+
+    for k,vs in subsequences.items():
+        vs.sort()
+
+    records = fasta(fastafile)
+    for r in records:
+        s = r.fastasequence
+        
+        if s.name in subsequences:
+            for strand,zstart,end in subsequences[s.name]:
+                if strand == "+":
+                    if zstart == -1 and end == -1:
+                        print ">%s" % (s.name)   
+                        print fastasequence.prettyprint_dna(s.seq, 60)
+                    else:
+                        print ">%s:%d-%d" % (s.name,zstart,end)
+                        print fastasequence.prettyprint_dna(s.seq[zstart:end], 60)
+                else:
+                    assert zstart >= 0
+                    assert end >= 0
+                    print ">%s:%d-%d (reverse-complement)" % (s.name,zstart,end)
+                    print fastasequence.prettyprint_dna(fastasequence.reverse_complement(s.seq[zstart:end]), 60)
+
+    records.close()
+
+if __name__ == "__main__":
+    if len(argv) < 2: 
+        print >> stderr, __doc__
+        exit(1)
+
+    if argv[1] == "extract":
+        if len(argv) != 4:
+            print fastaextract.__doc__
+            exit(3)
+
+        fastaextract(argv[2], argv[3])
+    elif argv[1] == "format":
+        try:
+            opts,args = getopt(argv[2:], "l:", ["linesize="])
+        except GetoptError:
+            print str(err)
+            print fastaformat.__doc__
+            exit(2)
+
+        linesize = 60
+        for o,a in opts:
+            if o in ("-l", "--linesize"):
+                linesize = int(a)
+            else:
+                assert False, "unhandled option"
+
+        if len(args) != 1:
+            print fastaformat.__doc__
+            exit(3)
+        
+        fastaformat(args[0], linesize)
+    elif argv[1] == "printlengths":
+        try:
+            opts,args = getopt(argv[2:], "i", ["ignoreN"])
+        except GetoptError:
+            print str(err)
+            print fastalengths.__doc__
+            exit(2)
+
+        ignoreNs = False
+        for o,a in opts:
+            if o in ("-i", "--ignoreN"):
+                ignoreNs = True
+            else:
+                assert False, "unhandled option"  
+
+        if len(args) != 1:
+            print fastalengths.__doc__
+            exit(3)
+
+        fastalengths(args[0], ignoreNs)
+    elif argv[1] == "generate":
+        if len(argv) != 3:
+            print fastagenerate.__doc__
+            exit(3)
+
+        fastagenerate(argv[2])
+    elif argv[1] == "diffs":
+        if len(argv) != 3:
+            print fastadiffs.__doc__
+            exit(3)
+
+        fastadiffs(argv[2])
+    elif argv[1] == "filteronlength":
+        if len(argv) != 4:
+            print fastafilter.__doc__
+            exit(3)
+
+        fastafilter(int(argv[2]),argv[3])
+    else:
+        print >> stderr, __doc__

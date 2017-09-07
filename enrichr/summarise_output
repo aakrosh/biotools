@@ -7,11 +7,15 @@
     where the options are:
         -h,--help : print usage and quit
         -d,--debug: print debug information
-    
+        -l,--libraries: only summarise the libraries in the following file [all]
+        -a,--all: print all results that pass threshold. 
+
     and the arguments are:
 
     fdrcutoff: the cutoff for the 'Adjusted P-value' in the tables
     outdir : the output directory to put results in
+
+    By default only the top 10 results that pass thresholds are printed.
 """
 
 from sys import argv, stderr, stdin, exit, stdout
@@ -27,9 +31,9 @@ __email__  = "ratan@virginia.edu"
 # do we want the debug information to be printed?
 debug_flag = False
 
-def main(cutoff, outdir):
+def main(cutoff, outdir, libs, printall):
     for filename in listdir(outdir):
-        output = []
+        vals = []
         with open("%s/%s" % (outdir,filename), 'r') as f:
             line = f.readline()
             tokens = line.strip().split("\t")
@@ -40,20 +44,33 @@ def main(cutoff, outdir):
             for line in f:
                 tokens = line.strip().split("\t")
                 if float(tokens[3]) < cutoff:
-                    val = str(round(float(tokens[3]), 3))
-                    output.append("\t"+"\t".join([tokens[0],tokens[1],val,tokens[-1]]))
-        if output:
+                    padj = round(float(tokens[3]), 3)
+                    val = str(padj)
+                    vals.append((padj,[tokens[0],tokens[1],str(val),tokens[-1]]))
+                    
+                    
+
+        vals.sort()
+        output = ["\t"+"\t".join(y) for x,y in vals]
+        if output and ((libs == None) or (filename[:-4] in libs)):
             print "%s:" % filename[:-4]
-            print "\n".join(output)
+            if printall:
+                print "\n".join(output)
+            else:
+                print "\n".join(output[:10])
+                print "\t..."
             print ""   
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+        opts, args = getopt(argv[1:], "hdl:a",["help", "debug", "libraries=", "all"])
     except GetoptError, err:
         print str(err)
         print >> stderr, __doc__
         exit(2) 
+
+    libs = None
+    printall = False
 
     for o, a in opts:
         if o in ("-h", "--help"):
@@ -61,6 +78,13 @@ if __name__ == "__main__":
             exit()
         elif o in ("-d", "--debug"):
             debug_flag = True
+        elif o in ("-l", "--libraries"):
+            libs = set()
+            with open(a, 'r') as f:
+                for line in f:
+                    libs.add(line.strip())
+        elif o in ("-a", "--all"):
+            printall = True
         else:
             assert False, "unhandled option"
 
@@ -68,4 +92,4 @@ if __name__ == "__main__":
         print >> stderr, __doc__
         exit(3)
 
-    main(float(args[0]), args[1])
+    main(float(args[0]), args[1], libs, printall)

@@ -2,20 +2,23 @@
 
 """
     usage:
-        summarise_output [options] fdrcutoff outdir
+        summarise_output [options] cutoff outdir
 
     where the options are:
         -h,--help : print usage and quit
         -d,--debug: print debug information
         -l,--libraries: only summarise the libraries in the following file [all]
         -a,--all: print all results that pass threshold. 
+        -z,--zscores: sort and threshold based on z-scores.
+        -c,--combined: sort and threshold based on combined scores.
 
     and the arguments are:
 
-    fdrcutoff: the cutoff for the 'Adjusted P-value' in the tables
+    cutoff: the cutoff to threshold in the tables
     outdir : the output directory to put results in
 
-    By default only the top 10 results that pass thresholds are printed.
+    By default, only the top 10 results that pass thresholds are printed. 
+    By default, the threshold is applied to the "Adjusted P-value"
 """
 
 from sys import argv, stderr, stdin, exit, stdout
@@ -31,26 +34,35 @@ __email__  = "ratan@virginia.edu"
 # do we want the debug information to be printed?
 debug_flag = False
 
-def main(cutoff, outdir, libs, printall):
+def main(cutoff, outdir, libs, printall, tindx):
     for filename in listdir(outdir):
         vals = []
         with open("%s/%s" % (outdir,filename), 'r') as f:
             line = f.readline()
             tokens = line.strip().split("\t")
-            assert tokens[0] == "Term"
+            assert tokens[0] == "Term", filename
             assert tokens[1] == "Overlap"
             assert tokens[3] == "Adjusted P-value"
+            assert tokens[6] == "Z-score"
+            assert tokens[7] == "Combined Score"
             assert tokens[-1] == "Genes"
             for line in f:
                 tokens = line.strip().split("\t")
-                if float(tokens[3]) < cutoff:
-                    padj = round(float(tokens[3]), 3)
-                    val = str(padj)
-                    vals.append((padj,[tokens[0],tokens[1],str(val),tokens[-1]]))
-                    
-                    
+                if tindx in [3,6]:
+                    if float(tokens[tindx]) < cutoff:
+                        padj = round(float(tokens[tindx]), 3)
+                        val = str(padj)
+                        vals.append((padj,[tokens[0],tokens[1],str(val),tokens[-1]]))
+                elif tindx == 7:
+                    if float(tokens[tindx]) > cutoff:
+                        score = round(float(tokens[tindx]), 3)
+                        val = str(score)
+                        vals.append((score,[tokens[0],tokens[1],str(val),tokens[-1]]))
+                else:
+                    raise NotImplemented
 
-        vals.sort()
+        if tindx in [3,6]: vals.sort()
+        elif tindx == 7: vals.sort(decreasing = True)
         output = ["\t"+"\t".join(y) for x,y in vals]
         if output and ((libs == None) or (filename[:-4] in libs)):
             print "%s:" % filename[:-4]
@@ -66,7 +78,7 @@ def main(cutoff, outdir, libs, printall):
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt(argv[1:], "hdl:a",["help", "debug", "libraries=", "all"])
+        opts, args = getopt(argv[1:], "hdl:azc",["help", "debug", "libraries=", "all", "zscores", "combined"])
     except GetoptError, err:
         print str(err)
         print >> stderr, __doc__
@@ -74,6 +86,7 @@ if __name__ == "__main__":
 
     libs = None
     printall = False
+    tindx = 3
 
     for o, a in opts:
         if o in ("-h", "--help"):
@@ -88,6 +101,10 @@ if __name__ == "__main__":
                     libs.add(line.strip())
         elif o in ("-a", "--all"):
             printall = True
+        elif o in ("-z", "--zscores"):
+            tindx = 6
+        elif o in ("-c", "--combined"):
+            tindx = 7
         else:
             assert False, "unhandled option"
 
@@ -95,4 +112,4 @@ if __name__ == "__main__":
         print >> stderr, __doc__
         exit(3)
 
-    main(float(args[0]), args[1], libs, printall)
+    main(float(args[0]), args[1], libs, printall, tindx)

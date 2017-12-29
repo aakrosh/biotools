@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+
+"""
+    usage:
+        submit_to_enrichr [options] input
+
+    where the options are:
+        -h,--help : print usage and quit
+        -d,--debug: print debug information
+
+    and the arguments are:
+
+    input: csv file with the input for enrichr
+"""
+
+from sys import argv, stderr, stdin, exit, stdout
+from getopt import getopt, GetoptError
+
+import json
+import requests
+
+__author__ = "Aakrosh Ratan"
+__email__  = "ratan@virginia.edu"
+
+# do we want the debug information to be printed?
+debug_flag = False
+
+ENRICHR_URL = 'http://amp.pharm.mssm.edu/Enrichr/addList'
+
+def main(filename):
+    global ENRICHR_URL
+
+    genes = []
+    with open(filename, 'r') as f:
+        for line in f:
+            genes.append(line.strip())
+
+    genes_str = '\n'.join([x for x in genes])
+    description = 'Example gene list'
+
+    payload = {
+        'list': (None, genes_str),
+        'description': (None, description)
+    }
+
+    response = requests.post(ENRICHR_URL, files=payload)
+    if not response.ok:
+        raise Exception('Error analyzing gene list')
+
+    data = json.loads(response.text)
+    print json.dumps(data, indent=2, sort_keys=True)
+    
+
+if __name__ == "__main__":
+    try:
+        opts, args = getopt(argv[1:], "hd",["help", "debug"])
+    except GetoptError, err:
+        print str(err)
+        print >> stderr, __doc__
+        exit(2) 
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            print >> stderr, __doc__
+            exit()
+        elif o in ("-d", "--debug"):
+            debug_flag = True
+        else:
+            assert False, "unhandled option"
+
+    if len(args) != 1:
+        print >> stderr, __doc__
+        exit(3)
+
+    main(args[0])

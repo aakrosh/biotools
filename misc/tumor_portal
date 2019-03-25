@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+
+# get the list of Highly significantly mutated genes, Significantly mutated genes
+#, Genes near significance, known cancer genes | highly compelling novel 
+# candidate cancer genes | other candidates from tumor portal
+
+from lxml import html
+import requests
+
+cancers = ["AML","BLCA","BRCA","CARC","CLL","CRC","DLBCL","ESO","GBM","HNSC","KIRC","LUAD","LUSC","MED","MEL","MM","NB","OV","PanCan","PRAD","RHAB","UCEC"]
+
+for cancer in cancers:
+    page = requests.get("http://www.tumorportal.org/tumor_types?ttype=%s" % cancer)
+    tree = html.fromstring(page.content)
+    known = tree.xpath('//div[@class="blue_name"]/text()')
+    compelling = tree.xpath('//div[@class="red_name"]/text()')
+    other = tree.xpath('//div[@class="black_name"]/text()')
+    
+    for g in known:
+        print "\t".join([g, "known", cancer])
+    for g in compelling:
+        print "\t".join([g, "novel_candidate", cancer])
+    for g in other:
+        print "\t".join([g, "candidate", cancer])

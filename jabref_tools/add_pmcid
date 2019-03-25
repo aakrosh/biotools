@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+
+import bibtexparser
+from bibtexparser.bparser import BibTexParser
+from bibtexparser.customization import convert_to_unicode
+import requests
+
+with open('test.bib') as bibtex_file:
+    parser = BibTexParser()
+    bib_database = bibtexparser.load(bibtex_file)
+
+    for entry in bib_database.entries:
+        if 'PMCID' not in entry.keys():
+            url = "http://www.ncbi.nlm.nih.gov/pubmed?term=%d[pdat]+AND+%d[volume]+AND+%s[page]" % (int(entry['year']),int(entry['volume']), entry['pages'])
+            print url
+            #f = requests.get(url)
+            #print f.text

@@ -1,0 +1,40 @@
+#!/usr/bin/env Rscript
+
+library(tidyverse)
+library(wesanderson)
+
+args = commandArgs(trailingOnly=TRUE)
+
+result_dir <- args[1]
+upfile <- list.files(path=result_dir, pattern="gsea_report_for_na_pos_[0-9]*.xls", full.names=T)[1]
+downfile <- list.files(path=result_dir, pattern="gsea_report_for_na_neg_[0-9]*.xls", full.names=T)[1]
+
+metadata <- read_tsv(args[2], col_names=F)
+
+up <- read_tsv(upfile)
+down <- read_tsv(downfile)
+
+df <- bind_rows(up, down) %>%
+      select(NAME, NES, `FDR q-val`) %>%
+      mutate(isup = ifelse(NES > 0, 1, 0)) %>%
+      mutate(isup = factor(isup, levels=c(0,1))) %>%
+      mutate(NAME = str_remove(NAME, "^HALLMARK_")) %>%
+      inner_join(metadata, by=c("NAME"="X1")) %>% 
+      rename("Category"="X2") %>%
+      mutate(Category = factor(Category))
+
+arrangement <- (df %>% filter(`FDR q-val` < 0.25) %>% arrange(NES))$NAME
+
+df %>% filter(`FDR q-val` < 0.25) %>%
+    mutate(NAME = factor(NAME, levels=arrangement)) %>%
+    ggplot(aes(NAME)) + geom_bar(aes(weight = NES, fill=Category)) + 
+        scale_fill_brewer(palette="Dark2") +
+        coord_flip() +
+        ylab("NES") + xlab("") +
+        theme_minimal(base_size=12) 
+
+
+        theme(legend.position="none") 
+
+
+        scale_fill_manual(values=alpha(c("blue", "red"), .5)) + 
